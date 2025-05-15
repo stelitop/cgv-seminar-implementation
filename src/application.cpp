@@ -20,6 +20,7 @@ DISABLE_WARNINGS_POP()
 #include <functional>
 #include <iostream>
 #include <vector>
+#include "camera.h"
 
 class Application {
 public:
@@ -41,7 +42,8 @@ public:
                 onMouseReleased(button, mods);
         });
 
-        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/dragon.obj");
+        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/snail.obj", true);
+        m_camera = Camera(&m_window, glm::vec3(1, 1, 1), glm::normalize(glm::vec3(-1, -1, -1)));
 
         try {
             ShaderBuilder defaultBuilder;
@@ -71,6 +73,7 @@ public:
             // This is your game loop
             // Put your real-time logic and rendering in here
             m_window.updateInput();
+            m_camera.updateInput();
 
             // Use ImGui for easy input/output of ints, floats, strings, etc...
             ImGui::Begin("Window");
@@ -86,7 +89,7 @@ public:
             // ...
             glEnable(GL_DEPTH_TEST);
 
-            const glm::mat4 mvpMatrix = m_projectionMatrix * m_viewMatrix * m_modelMatrix;
+            const glm::mat4 mvpMatrix = m_projectionMatrix * m_camera.viewMatrix() * m_modelMatrix;
             // Normals should be transformed differently than positions (ignoring translations + dealing with scaling):
             // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
             const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
@@ -162,6 +165,8 @@ private:
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;
     bool m_useMaterial { true };
+
+    Camera m_camera = 0;
 
     // Projection and view matrices for you to fill in and use
     glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);

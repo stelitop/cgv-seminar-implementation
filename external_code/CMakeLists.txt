@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.11 FATAL_ERROR)
-project(ComputerGraphics C CXX)
+project(OrigamiSimulator C CXX)
 
 # Slightly modified versions of the files from the cpp-starter-project by Jason Turner:
 # https://github.com/lefticus/cpp_starter_project/

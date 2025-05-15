@@ -1,19 +1,20 @@
 cmake_minimum_required(VERSION 3.14 FATAL_ERROR)
-project(ComputerGraphics C CXX)
+project(OrigamiSimulator C CXX)
 
 # Set this before including framework such that it knows to use the OpenGL4.5 version of GLAD
-if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/framework")
+if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/external_code")
 	# Create framework library and include CMake scripts (compiler warnings, sanitizers and static analyzers).
-	add_subdirectory("framework")
+	add_subdirectory("external_code")
 elseif(PROJECT_IS_TOP_LEVEL)
-	add_subdirectory("../../../framework/" "${CMAKE_CURRENT_BINARY_DIR}/framework/")
+	add_subdirectory("../../../external_code/" "${CMAKE_CURRENT_BINARY_DIR}/external_code/")
 endif()
 
 add_executable(OrigamiSimulatorImplementation
     "src/application.cpp"
     "src/texture.cpp"
 	"src/mesh.cpp"
-)
+	"src/camera.cpp"
+)	
 
 target_compile_definitions(OrigamiSimulatorImplementation PRIVATE RESOURCE_ROOT="${CMAKE_CURRENT_LIST_DIR}/")
 target_compile_features(OrigamiSimulatorImplementation PRIVATE cxx_std_20)
