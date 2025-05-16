@@ -12,15 +12,19 @@ DISABLE_WARNINGS_PUSH()
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
-#include <glm/mat4x4.hpp>
+//#include <glm/
 #include <imgui/imgui.h>
 DISABLE_WARNINGS_POP()
+
+//#include <framework/>
+
 #include <framework/shader.h>
 #include <framework/window.h>
 #include <functional>
 #include <iostream>
 #include <vector>
 #include "camera.h"
+#include "origami.h"
 
 class Application {
 public:
@@ -44,6 +48,8 @@ public:
 
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/snail.obj", true);
         m_camera = Camera(&m_window, glm::vec3(1, 1, 1), glm::normalize(glm::vec3(-1, -1, -1)));
+
+        Origami::load_from_file("origami_examples/mapfold.fold");
 
         try {
             ShaderBuilder defaultBuilder;
@@ -122,7 +128,7 @@ public:
     // mods - Any modifier keys pressed, like shift or control
     void onKeyPressed(int key, int mods)
     {
-        std::cout << "Key pressed: " << key << std::endl;
+        //std::cout << "Key pressed: " << key << std::endl;
     }
 
     // In here you can handle key releases
@@ -130,13 +136,13 @@ public:
     // mods - Any modifier keys pressed, like shift or control
     void onKeyReleased(int key, int mods)
     {
-        std::cout << "Key released: " << key << std::endl;
+        //std::cout << "Key released: " << key << std::endl;
     }
 
     // If the mouse is moved this function will be called with the x, y screen-coordinates of the mouse
     void onMouseMove(const glm::dvec2& cursorPos)
     {
-        std::cout << "Mouse at position: " << cursorPos.x << " " << cursorPos.y << std::endl;
+        //std::cout << "Mouse at position: " << cursorPos.x << " " << cursorPos.y << std::endl;
     }
 
     // If one of the mouse buttons is pressed this function will be called
@@ -144,7 +150,7 @@ public:
     // mods - Any modifier buttons pressed
     void onMouseClicked(int button, int mods)
     {
-        std::cout << "Pressed mouse button: " << button << std::endl;
+        //std::cout << "Pressed mouse button: " << button << std::endl;
     }
 
     // If one of the mouse buttons is released this function will be called
@@ -152,7 +158,7 @@ public:
     // mods - Any modifier buttons pressed
     void onMouseReleased(int button, int mods)
     {
-        std::cout << "Released mouse button: " << button << std::endl;
+        //std::cout << "Released mouse button: " << button << std::endl;
     }
 
 private:

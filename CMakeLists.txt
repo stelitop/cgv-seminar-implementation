@@ -8,12 +8,13 @@ if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/external_code")
 elseif(PROJECT_IS_TOP_LEVEL)
 	add_subdirectory("../../../external_code/" "${CMAKE_CURRENT_BINARY_DIR}/external_code/")
 endif()
-
+	
 add_executable(OrigamiSimulatorImplementation
     "src/application.cpp"
     "src/texture.cpp"
 	"src/mesh.cpp"
 	"src/camera.cpp"
+	"src/origami.cpp"
 )	
 
 target_compile_definitions(OrigamiSimulatorImplementation PRIVATE RESOURCE_ROOT="${CMAKE_CURRENT_LIST_DIR}/")
@@ -26,6 +27,10 @@ set_project_warnings(OrigamiSimulatorImplementation)
 add_custom_command(TARGET OrigamiSimulatorImplementation POST_BUILD
 	COMMAND ${CMAKE_COMMAND} -E copy_directory
 	"${CMAKE_CURRENT_LIST_DIR}/resources/" "$<TARGET_FILE_DIR:OrigamiSimulatorImplementation>/resources/")
+
+add_custom_command(TARGET OrigamiSimulatorImplementation POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E copy_directory
+	"${CMAKE_CURRENT_LIST_DIR}/origami_examples/" "$<TARGET_FILE_DIR:OrigamiSimulatorImplementation>/origami_examples/")
 
 # We would like to copy the files when they changed. Even if no *.cpp files were modified (and
 # thus no build is triggered). We tell CMake that the executable depends on the shader files in
