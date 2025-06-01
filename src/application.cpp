@@ -31,6 +31,7 @@ public:
     Application()
         : m_window("Final Project", glm::ivec2(1024, 1024), OpenGLVersion::GL41)
         , m_texture(RESOURCE_ROOT "resources/checkerboard.png")
+        , m_origami(Origami::load_from_file("origami_examples/simple.fold"))
     {
         m_window.registerKeyCallback([this](int key, int scancode, int action, int mods) {
             if (action == GLFW_PRESS)
@@ -49,7 +50,8 @@ public:
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/snail.obj", true);
         m_camera = Camera(&m_window, glm::vec3(1, 1, 1), glm::normalize(glm::vec3(-1, -1, -1)));
 
-        Origami::load_from_file("origami_examples/mapfold.fold");
+        //m_origami = Origami::load_from_file("origami_examples/simple.fold");
+        m_origami = Origami::load_from_file("origami_examples/mapfold.fold");
 
         try {
             ShaderBuilder defaultBuilder;
@@ -59,8 +61,18 @@ public:
 
             ShaderBuilder shadowBuilder;
             shadowBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/shadow_vert.glsl");
-            shadowBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "Shaders/shadow_frag.glsl");
+            shadowBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/shadow_frag.glsl");
             m_shadowShader = shadowBuilder.build();
+
+            ShaderBuilder faceBuilder;
+            faceBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/face_vert.glsl");
+            faceBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/face_frag.glsl");
+            m_faceShader = faceBuilder.build();
+
+            ShaderBuilder edgeBuilder;
+            edgeBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/edge_vert.glsl");
+            edgeBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/edge_frag.glsl");
+            m_edgeShader = edgeBuilder.build();
 
             // Any new shaders can be added below in similar fashion.
             // ==> Don't forget to reconfigure CMake when you do!
@@ -92,7 +104,6 @@ public:
             glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-            // ...
             glEnable(GL_DEPTH_TEST);
 
             const glm::mat4 mvpMatrix = m_projectionMatrix * m_camera.viewMatrix() * m_modelMatrix;
@@ -100,23 +111,7 @@ public:
             // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
             const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
 
-            for (GPUMesh& mesh : m_meshes) {
-                m_defaultShader.bind();
-                glUniformMatrix4fv(m_defaultShader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
-                //Uncomment this line when you use the modelMatrix (or fragmentPosition)
-                //glUniformMatrix4fv(m_defaultShader.getUniformLocation("modelMatrix"), 1, GL_FALSE, glm::value_ptr(m_modelMatrix));
-                glUniformMatrix3fv(m_defaultShader.getUniformLocation("normalModelMatrix"), 1, GL_FALSE, glm::value_ptr(normalModelMatrix));
-                if (mesh.hasTextureCoords()) {
-                    m_texture.bind(GL_TEXTURE0);
-                    glUniform1i(m_defaultShader.getUniformLocation("colorMap"), 0);
-                    glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_TRUE);
-                    glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), GL_FALSE);
-                } else {
-                    glUniform1i(m_defaultShader.getUniformLocation("hasTexCoords"), GL_FALSE);
-                    glUniform1i(m_defaultShader.getUniformLocation("useMaterial"), m_useMaterial);
-                }
-                mesh.draw(m_defaultShader);
-            }
+            m_origami.draw(m_faceShader, m_edgeShader, mvpMatrix);
 
             // Processes input and swaps the window buffer
             m_window.swapBuffers();
@@ -167,6 +162,8 @@ private:
     // Shader for default rendering and for depth rendering
     Shader m_defaultShader;
     Shader m_shadowShader;
+    Shader m_faceShader;
+    Shader m_edgeShader;
 
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;
@@ -178,6 +175,8 @@ private:
     glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);
     glm::mat4 m_viewMatrix = glm::lookAt(glm::vec3(-1, 1, -1), glm::vec3(0), glm::vec3(0, 1, 0));
     glm::mat4 m_modelMatrix { 1.0f };
+
+    Origami m_origami;
 };
 
 int main()
