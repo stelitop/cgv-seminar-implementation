@@ -110,8 +110,10 @@ public:
             }
 
             if (m_simulate) {
-                m_origami.step();
-                m_origami.updateVertexBuffers();
+                for (int i = 0; i < m_steps_per_frame; i++) {
+                    m_origami.step();
+                    m_origami.updateVertexBuffers();
+                }
             }
 
             // Clear the screen
@@ -174,30 +176,34 @@ public:
 
     void renderUI() {
         ImGui::Begin("Settings");
+        ImGui::PushItemWidth(150.0f);
 
         //----------------------------------------------
         ImGui::SliderFloat("Fold Percent", &m_origami.target_angle_percent, 0.0f, 1.0f);
         ImGui::Checkbox("Simulate", &m_simulate);
         ImGui::SameLine();
+        ImGui::SliderInt("Steps Per Frame", &m_steps_per_frame, 1, 10, "%d");
+
         if (ImGui::Button("Take Steps")) {
             for (int i = 0; i < m_numberOfStepsToTake; i++) {
                 m_origami.step();
             }
             m_origami.updateVertexBuffers();
         }
-        ImGui::SliderInt("# Steps", &m_numberOfStepsToTake, 1, 20);
-        ImGui::NewLine();
-
+        ImGui::SameLine();
+        ImGui::SliderInt("# Steps", &m_numberOfStepsToTake, 1, 50);
         if (ImGui::Button("Reset Origami")) {
             m_origami.free();
             m_origami = Origami::loadFromFile("origami_examples/mapfold.fold");
         }
-        if (ImGui::Button("Reset Default Settings")) {
-            m_origami.setDefaultSettings();
-        }
+        ImGui::NewLine();
+
         //----------------------------------------------
 
         if (ImGui::CollapsingHeader("Parameters")) {
+            if (ImGui::Button("Reset Default Parameters")) {
+                m_origami.setDefaultSettings();
+            }
             ImGui::Checkbox("Enable Axial Constraints", &m_origami.enable_axial_constraints);
             if (m_origami.enable_axial_constraints) {
                 if (ImGui::SliderFloat("Axial Stiffness (EA)", &m_origami.EA, 10.0f, 100.0f)) {
@@ -217,6 +223,7 @@ public:
             if (m_origami.enable_damping_force) {
                 ImGui::SliderFloat("Damping Ratio", &m_origami.damping_ratio, 0.0f, 0.5f);
             }
+            ImGui::NewLine();
         }
 
         //-------------------------------------------
@@ -226,6 +233,7 @@ public:
             if (m_renderMode == RENDERMODE_FORCE || m_renderMode == RENDERMODE_VELOCITY) {
                 ImGui::SliderFloat("Magnitude Cutoff", &m_magnitudeCutoff, 0.1f, 6.0f);
             }
+            ImGui::NewLine();
         }
 
         ImGui::End();
@@ -257,6 +265,7 @@ private:
 
     // settings
     bool m_simulate = true;
+    int m_steps_per_frame = 5;
     int m_renderMode = RENDERMODE_PLAIN;
     int m_numberOfStepsToTake = 3;
     float m_magnitudeCutoff = 1.0f; // used for visualising force/velocity, max value to clamp to
