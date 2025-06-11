@@ -25,13 +25,13 @@ DISABLE_WARNINGS_POP()
 #include <vector>
 #include "camera.h"
 #include "origami.h"
+#include "glyph_drawer.h"
 
 class Application {
 public:
     Application()
         : m_window("Final Project", glm::ivec2(1024, 1024), OpenGLVersion::GL41)
         , m_texture(RESOURCE_ROOT "resources/checkerboard.png")
-        , m_origami(Origami::load_from_file("origami_examples/simple.fold"))
     {
         m_window.registerKeyCallback([this](int key, int scancode, int action, int mods) {
             if (action == GLFW_PRESS)
@@ -46,12 +46,15 @@ public:
             else if (action == GLFW_RELEASE)
                 onMouseReleased(button, mods);
         });
+        m_window.registerWindowResizeCallback([&](const glm::ivec2& size)
+            { m_projectionMatrix =
+            glm::perspective(glm::radians(80.0f), m_window.getAspectRatio(), 0.1f, 1000.0f); });
 
         m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/snail.obj", true);
         m_camera = Camera(&m_window, glm::vec3(1, 1, 1), glm::normalize(glm::vec3(-1, -1, -1)));
 
         //m_origami = Origami::load_from_file("origami_examples/simple.fold");
-        m_origami = Origami::load_from_file("origami_examples/mapfold.fold");
+        m_origami = Origami::loadFromFile("origami_examples/mapfold.fold");
 
         try {
             ShaderBuilder defaultBuilder;
@@ -74,6 +77,11 @@ public:
             edgeBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/edge_frag.glsl");
             m_edgeShader = edgeBuilder.build();
 
+            ShaderBuilder plainBuilder;
+            plainBuilder.addStage(GL_VERTEX_SHADER, RESOURCE_ROOT "shaders/face_vert.glsl");
+            plainBuilder.addStage(GL_FRAGMENT_SHADER, RESOURCE_ROOT "shaders/plain_frag.glsl");
+            m_plainShader = plainBuilder.build();
+
             // Any new shaders can be added below in similar fashion.
             // ==> Don't forget to reconfigure CMake when you do!
             //     Visual Studio: PROJECT => Generate Cache for ComputerGraphics
@@ -88,17 +96,23 @@ public:
     {
         int dummyInteger = 0; // Initialized to 0
         while (!m_window.shouldClose()) {
+            glViewport(0, 0, m_window.getWindowSize().x, m_window.getWindowSize().y);
             // This is your game loop
             // Put your real-time logic and rendering in here
             m_window.updateInput();
-            m_camera.updateInput();
 
             // Use ImGui for easy input/output of ints, floats, strings, etc...
-            ImGui::Begin("Window");
-            ImGui::InputInt("This is an integer input", &dummyInteger); // Use ImGui::DragInt or ImGui::DragFloat for larger range of numbers.
-            ImGui::Text("Value is: %i", dummyInteger); // Use C printf formatting rules (%i is a signed integer)
-            ImGui::Checkbox("Use material if no texture", &m_useMaterial);
-            ImGui::End();
+            renderUI();
+
+            ImGuiIO io = ImGui::GetIO();
+            if (!io.WantCaptureMouse) {
+                m_camera.updateInput();
+            }
+
+            if (m_simulate) {
+                m_origami.step();
+                m_origami.updateVertexBuffers();
+            }
 
             // Clear the screen
             glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
@@ -111,7 +125,9 @@ public:
             // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
             const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
 
-            m_origami.draw(m_faceShader, m_edgeShader, mvpMatrix);
+            m_origami.draw(m_faceShader, m_edgeShader, mvpMatrix, m_renderMode, m_magnitudeCutoff);
+            //m_glyphDrawer.loadGlyphs(m_origami.getVertices(), m_origami.calculateTotalForce(), 3.0f);
+            //m_glyphDrawer.draw(m_plainShader, mvpMatrix);
 
             // Processes input and swaps the window buffer
             m_window.swapBuffers();
@@ -156,6 +172,65 @@ public:
         //std::cout << "Released mouse button: " << button << std::endl;
     }
 
+    void renderUI() {
+        ImGui::Begin("Settings");
+
+        //----------------------------------------------
+        ImGui::SliderFloat("Fold Percent", &m_origami.target_angle_percent, 0.0f, 1.0f);
+        ImGui::Checkbox("Simulate", &m_simulate);
+        ImGui::SameLine();
+        if (ImGui::Button("Take Steps")) {
+            for (int i = 0; i < m_numberOfStepsToTake; i++) {
+                m_origami.step();
+            }
+            m_origami.updateVertexBuffers();
+        }
+        ImGui::SliderInt("# Steps", &m_numberOfStepsToTake, 1, 20);
+        ImGui::NewLine();
+
+        if (ImGui::Button("Reset Origami")) {
+            m_origami.free();
+            m_origami = Origami::loadFromFile("origami_examples/mapfold.fold");
+        }
+        if (ImGui::Button("Reset Default Settings")) {
+            m_origami.setDefaultSettings();
+        }
+        //----------------------------------------------
+
+        if (ImGui::CollapsingHeader("Parameters")) {
+            ImGui::Checkbox("Enable Axial Constraints", &m_origami.enable_axial_constraints);
+            if (m_origami.enable_axial_constraints) {
+                if (ImGui::SliderFloat("Axial Stiffness (EA)", &m_origami.EA, 10.0f, 100.0f)) {
+                    m_origami.calculateOptimalTimeStep();
+                }
+            }
+            ImGui::Checkbox("Enable Crease Constraints", &m_origami.enable_crease_constraints);
+            if (m_origami.enable_crease_constraints) {
+                ImGui::SliderFloat("Fold Stiffness", &m_origami.k_fold, 0.0f, 3.0f);
+                ImGui::SliderFloat("Facet Crease Stiffness", &m_origami.k_facet, 0.0f, 3.0f);
+            }
+            ImGui::Checkbox("Enable Face Constraints", &m_origami.enable_face_constraints);
+            if (m_origami.enable_face_constraints) {
+                ImGui::SliderFloat("Face Stiffness", &m_origami.k_face, 0.0f, 5.0f);
+            }
+            ImGui::Checkbox("Enable Damping Force", &m_origami.enable_damping_force);
+            if (m_origami.enable_damping_force) {
+                ImGui::SliderFloat("Damping Ratio", &m_origami.damping_ratio, 0.0f, 0.5f);
+            }
+        }
+
+        //-------------------------------------------
+        if (ImGui::CollapsingHeader("Visualisation Options")) {
+            ImGui::Combo("Render Mode", &m_renderMode, "Plain\0Force Amplitude\0Velocity Amplitude");
+
+            if (m_renderMode == RENDERMODE_FORCE || m_renderMode == RENDERMODE_VELOCITY) {
+                ImGui::SliderFloat("Magnitude Cutoff", &m_magnitudeCutoff, 0.1f, 6.0f);
+            }
+        }
+
+        ImGui::End();
+    }
+
 private:
     Window m_window;
 
@@ -164,6 +239,7 @@ private:
     Shader m_shadowShader;
     Shader m_faceShader;
     Shader m_edgeShader;
+    Shader m_plainShader;
 
     std::vector<GPUMesh> m_meshes;
     Texture m_texture;
@@ -177,6 +253,13 @@ private:
     glm::mat4 m_modelMatrix { 1.0f };
 
     Origami m_origami;
+    GlyphDrawer m_glyphDrawer;
+
+    // settings
+    bool m_simulate = true;
+    int m_renderMode = RENDERMODE_PLAIN;
+    int m_numberOfStepsToTake = 3;
+    float m_magnitudeCutoff = 1.0f; // used for visualising force/velocity, max value to clamp to
 };
 
 int main()
