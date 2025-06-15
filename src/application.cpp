@@ -26,12 +26,15 @@ DISABLE_WARNINGS_POP()
 #include "camera.h"
 #include "origami.h"
 #include "glyph_drawer.h"
+#include <ShObjIdl_core.h>
+#include "settings.h"
 
 class Application {
 public:
     Application()
         : m_window("Final Project", glm::ivec2(1024, 1024), OpenGLVersion::GL41)
         , m_texture(RESOURCE_ROOT "resources/checkerboard.png")
+        , m_glyphDrawer(m_settings)
     {
         m_window.registerKeyCallback([this](int key, int scancode, int action, int mods) {
             if (action == GLFW_PRESS)
@@ -48,13 +51,14 @@ public:
         });
         m_window.registerWindowResizeCallback([&](const glm::ivec2& size)
             { m_projectionMatrix =
-            glm::perspective(glm::radians(80.0f), m_window.getAspectRatio(), 0.1f, 1000.0f); });
+            glm::perspective(glm::radians(80.0f), m_window.getAspectRatio(), 0.1f, 10000.0f); });
 
-        m_meshes = GPUMesh::loadMeshGPU(RESOURCE_ROOT "resources/snail.obj", true);
         m_camera = Camera(&m_window, glm::vec3(1, 1, 1), glm::normalize(glm::vec3(-1, -1, -1)));
 
         //m_origami = Origami::load_from_file("origami_examples/simple.fold");
-        m_origami = Origami::loadFromFile("origami_examples/mapfold.fold");
+        //m_origami = Origami::loadFromFile("origami_examples/mapfold.fold
+        //m_origami = Origami::loadFromFile("origami_examples/huffmanWaterbomb.fold");
+        m_origami = Origami::loadFromFile(m_filename);
 
         try {
             ShaderBuilder defaultBuilder;
@@ -109,8 +113,8 @@ public:
                 m_camera.updateInput();
             }
 
-            if (m_simulate) {
-                for (int i = 0; i < m_steps_per_frame; i++) {
+            if (m_settings.simulate) {
+                for (int i = 0; i < m_settings.steps_per_frame; i++) {
                     m_origami.step();
                     m_origami.updateVertexBuffers();
                 }
@@ -127,13 +131,13 @@ public:
             // https://paroj.github.io/gltut/Illumination/Tut09%20Normal%20Transformation.html
             const glm::mat3 normalModelMatrix = glm::inverseTranspose(glm::mat3(m_modelMatrix));
 
-            m_origami.draw(m_faceShader, m_edgeShader, mvpMatrix, m_renderMode, m_magnitudeCutoff);
-            //m_glyphDrawer.loadGlyphs(m_origami.getVertices(), m_origami.calculateTotalForce(), 3.0f);
-            //m_glyphDrawer.draw(m_plainShader, mvpMatrix);
+            m_origami.draw(m_faceShader, m_edgeShader, mvpMatrix, m_settings);
+            drawGlyphs(mvpMatrix);
 
             // Processes input and swaps the window buffer
             m_window.swapBuffers();
         }
+        m_origami.free();
     }
 
     // In here you can handle key presses
@@ -163,7 +167,22 @@ public:
     // mods - Any modifier buttons pressed
     void onMouseClicked(int button, int mods)
     {
-        //std::cout << "Pressed mouse button: " << button << std::endl;
+        if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+            auto tmp = m_window.getNormalizedCursorPos();
+            auto screenResolution = glm::vec2(m_window.getWindowSize());
+            auto pixel = glm::ivec2(tmp * screenResolution);
+            glm::vec2 position = (glm::vec2(pixel) + 0.5f) / screenResolution * 2.0f - 1.0f;
+            Ray r = m_camera.generateRay(position, m_projectionMatrix);
+            if (m_origami.intersectWithRay(r)) {
+                m_settings.selectedPointFace = r.face;
+                m_settings.selectedPointBarycentricCoords = r.barycentricCoords;
+                //std::cout << "Point selected: " << m_settings.selectedPoint.x << " " << m_settings.selectedPoint.y << " " << m_settings.selectedPoint.z << std::endl;
+                m_settings.useSelectedPoint = true;
+            }
+            else {
+                m_settings.useSelectedPoint = false;
+            }
+        }
     }
 
     // If one of the mouse buttons is released this function will be called
@@ -179,23 +198,48 @@ public:
         ImGui::PushItemWidth(150.0f);
 
         //----------------------------------------------
-        ImGui::SliderFloat("Fold Percent", &m_origami.target_angle_percent, 0.0f, 1.0f);
-        ImGui::Checkbox("Simulate", &m_simulate);
+        if (ImGui::Button("Select File")) {
+            // file selection code taken from https://cplusplus.com/forum/windows/169960/
+            char filename[MAX_PATH];
+
+            OPENFILENAME ofn;
+            ZeroMemory(&filename, sizeof(filename));
+            ZeroMemory(&ofn, sizeof(ofn));
+            ofn.lStructSize = sizeof(ofn);
+            ofn.hwndOwner = NULL;  // If you have a window to center over, put its HANDLE here
+            ofn.lpstrFilter = "Fold Files\0*.fold\0Any File\0*.*\0";
+            ofn.lpstrFile = filename;
+            ofn.nMaxFile = MAX_PATH;
+            ofn.lpstrTitle = "Select a file";
+            ofn.Flags = OFN_DONTADDTORECENT | OFN_FILEMUSTEXIST;
+
+            if (GetOpenFileNameA(&ofn))
+            {
+                m_filename = std::string(filename);
+                m_origami.free();
+                m_origami = Origami::loadFromFile(m_filename);
+            }
+        }
         ImGui::SameLine();
-        ImGui::SliderInt("Steps Per Frame", &m_steps_per_frame, 1, 10, "%d");
+        ImGui::Text(m_origami.name.c_str());
+        ImGui::SliderFloat("Fold Percent", &m_origami.target_angle_percent, 0.0f, 1.0f);
+        ImGui::Checkbox("Simulate", &m_settings.simulate);
+        ImGui::SameLine();
+        ImGui::SliderInt("Steps Per Frame", &m_settings.steps_per_frame, 1, 10, "%d");
 
         if (ImGui::Button("Take Steps")) {
-            for (int i = 0; i < m_numberOfStepsToTake; i++) {
+            for (int i = 0; i < m_settings.numberOfStepsToTake; i++) {
                 m_origami.step();
             }
             m_origami.updateVertexBuffers();
         }
         ImGui::SameLine();
-        ImGui::SliderInt("# Steps", &m_numberOfStepsToTake, 1, 50);
+        ImGui::SliderInt("# Steps", &m_settings.numberOfStepsToTake, 1, 50);
         if (ImGui::Button("Reset Origami")) {
             m_origami.free();
-            m_origami = Origami::loadFromFile("origami_examples/mapfold.fold");
+            m_origami = Origami::loadFromFile(m_filename);
         }
+        ImGui::SliderFloat("Selected Point Radius", &m_settings.selectedPointRadius, 0.0f, 0.5f);
         ImGui::NewLine();
 
         //----------------------------------------------
@@ -228,21 +272,125 @@ public:
 
         //-------------------------------------------
         if (ImGui::CollapsingHeader("Visualisation Options")) {
-            ImGui::Combo("Render Mode", &m_renderMode, "Plain\0Force Amplitude\0Velocity Amplitude");
+            ImGui::Combo("Render Mode", &m_settings.renderMode, "Plain\0Velocity Amplitude\0Force Amplitude");
 
-            if (m_renderMode == RENDERMODE_FORCE || m_renderMode == RENDERMODE_VELOCITY) {
-                ImGui::SliderFloat("Magnitude Cutoff", &m_magnitudeCutoff, 0.1f, 6.0f);
+            if (m_settings.renderMode == RENDERMODE_FORCE || m_settings.renderMode == RENDERMODE_VELOCITY) {
+                ImGui::SliderFloat("Magnitude Cutoff", &m_settings.magnitudeCutoff, 0.01f, 1.0f);
             }
+            
+            ImGui::NewLine();
+        }
+        //-------------------------------------------
+        if (ImGui::CollapsingHeader("Glyph Options")) {
+            ImGui::Checkbox("Normalize Glyphs", &m_settings.showGlyphNormalized);
+            ImGui::SameLine();
+            if (m_settings.showGlyphNormalized) {
+                ImGui::SliderFloat("Glyph Length", &m_settings.glyphLength, 0.0f, 2.0f);
+            }
+            else {
+                ImGui::SliderFloat("Glyph Scale", &m_settings.glyphScale, 0.01f, 10.0f);
+            }
+            ImGui::SliderInt("Face Splitting", &m_settings.faceSplitting, 1, 4);
+            ImGui::Checkbox("Velocity Glyphs", &m_settings.showGlyphVelocity);
+            ImGui::SameLine();
+            ImGui::ColorEdit3("Color##Velocity Glyph Color", &m_settings.glyphVelocityColor[0]);
+            ImGui::Checkbox("Total Force Glyphs", &m_settings.showGlyphTotalForce);
+            ImGui::SameLine();
+            ImGui::ColorEdit3("Color##Total Force Glyph Color", &m_settings.glyphTotalForceColor[0]);
+            ImGui::Checkbox("Axial Constraint Glyphs", &m_settings.showGlyphAxialConstraints);
+            ImGui::SameLine();
+            ImGui::ColorEdit3("Color##Axial Constraint Glyph Color", &m_settings.glyphAxialConstraintColor[0]);
+            ImGui::Checkbox("Crease Constraint Glyphs", &m_settings.showGlyphCreaseConstraints);
+            ImGui::SameLine();
+            ImGui::ColorEdit3("Color##Crease Constraint Glyph Color", &m_settings.glyphCreaseConstraintsColor[0]);
+            ImGui::Checkbox("Face Constraint Glyphs", &m_settings.showGlyphFaceConstraints);
+            ImGui::SameLine();
+            ImGui::ColorEdit3("Color##Face Constraint Glyph Color", &m_settings.glyphFaceConstraintsColor[0]);
+            ImGui::Checkbox("Damping Force Glyphs", &m_settings.showGlyphDampingForce);
+            ImGui::SameLine();
+            ImGui::ColorEdit3("Color##Damping Force Glyph Color", &m_settings.glyphDampingForceColor[0]);
             ImGui::NewLine();
         }
 
         ImGui::End();
     }
 
-private:
+    void drawGlyphs(glm::mat4 mvpMatrix) {
+
+        if (m_settings.showGlyphTotalForce) {
+            if (m_settings.showGlyphNormalized) {
+                m_glyphDrawer.loadGlyphsSetLength(m_origami, m_origami.getVertices(), m_origami.getTotalForce(), m_settings.glyphLength);
+            }
+            else {
+                m_glyphDrawer.loadGlyphs(m_origami, m_origami.getVertices(), m_origami.getTotalForce(), m_settings.glyphScale);
+            }
+            m_glyphDrawer.draw(m_plainShader, mvpMatrix, m_settings.glyphTotalForceColor);
+        }
+
+        if (m_settings.showGlyphVelocity) {
+            if (m_settings.showGlyphNormalized) {
+                m_glyphDrawer.loadGlyphsSetLength(m_origami, m_origami.getVertices(), m_origami.getVelocities(), m_settings.glyphLength);
+            }
+            else {
+                m_glyphDrawer.loadGlyphs(m_origami, m_origami.getVertices(), m_origami.getVelocities(), m_settings.glyphScale);
+            }
+            m_glyphDrawer.draw(m_plainShader, mvpMatrix, m_settings.glyphVelocityColor);
+        }
+
+        if (m_settings.showGlyphAxialConstraints) {
+            if (m_settings.showGlyphNormalized) {
+                m_glyphDrawer.loadGlyphsSetLength(m_origami, m_origami.getVertices(), m_origami.axialConstraints(), m_settings.glyphLength);
+            }
+            else {
+                m_glyphDrawer.loadGlyphs(m_origami, m_origami.getVertices(), m_origami.axialConstraints(), m_settings.glyphScale);
+            }
+            m_glyphDrawer.draw(m_plainShader, mvpMatrix, m_settings.glyphAxialConstraintColor);
+        }
+
+        if (m_settings.showGlyphCreaseConstraints) {
+            if (m_settings.showGlyphNormalized) {
+                m_glyphDrawer.loadGlyphsSetLength(m_origami, m_origami.getVertices(), m_origami.creaseConstraints(), m_settings.glyphLength);
+            }
+            else {
+                m_glyphDrawer.loadGlyphs(m_origami, m_origami.getVertices(), m_origami.creaseConstraints(), m_settings.glyphScale);
+            }
+            m_glyphDrawer.draw(m_plainShader, mvpMatrix, m_settings.glyphCreaseConstraintsColor);
+        }
+
+        if (m_settings.showGlyphFaceConstraints) {
+            if (m_settings.showGlyphNormalized) {
+                m_glyphDrawer.loadGlyphsSetLength(m_origami, m_origami.getVertices(), m_origami.faceConstraints(), m_settings.glyphLength);
+            }
+            else {
+                m_glyphDrawer.loadGlyphs(m_origami, m_origami.getVertices(), m_origami.faceConstraints(), m_settings.glyphScale);
+            }
+            m_glyphDrawer.draw(m_plainShader, mvpMatrix, m_settings.glyphFaceConstraintsColor);
+        }
+
+        if (m_settings.showGlyphFaceConstraints) {
+            if (m_settings.showGlyphNormalized) {
+                m_glyphDrawer.loadGlyphsSetLength(m_origami, m_origami.getVertices(), m_origami.faceConstraints(), m_settings.glyphLength);
+            }
+            else {
+                m_glyphDrawer.loadGlyphs(m_origami, m_origami.getVertices(), m_origami.faceConstraints(), m_settings.glyphScale);
+            }
+            m_glyphDrawer.draw(m_plainShader, mvpMatrix, m_settings.glyphFaceConstraintsColor);
+        }
+
+        if (m_settings.showGlyphDampingForce) {
+            if (m_settings.showGlyphNormalized) {
+                m_glyphDrawer.loadGlyphsSetLength(m_origami, m_origami.getVertices(), m_origami.dampingForce(), m_settings.glyphLength);
+            }
+            else {
+                m_glyphDrawer.loadGlyphs(m_origami, m_origami.getVertices(), m_origami.dampingForce(), m_settings.glyphScale);
+            }
+            m_glyphDrawer.draw(m_plainShader, mvpMatrix, m_settings.glyphDampingForceColor);
+        }
+    }
+
+private: 
     Window m_window;
 
-    // Shader for default rendering and for depth rendering
     Shader m_defaultShader;
     Shader m_shadowShader;
     Shader m_faceShader;
@@ -255,20 +403,15 @@ private:
 
     Camera m_camera = 0;
 
-    // Projection and view matrices for you to fill in and use
     glm::mat4 m_projectionMatrix = glm::perspective(glm::radians(80.0f), 1.0f, 0.1f, 30.0f);
     glm::mat4 m_viewMatrix = glm::lookAt(glm::vec3(-1, 1, -1), glm::vec3(0), glm::vec3(0, 1, 0));
     glm::mat4 m_modelMatrix { 1.0f };
 
+    std::string m_filename = "origami_examples/mapfold.fold";
     Origami m_origami;
     GlyphDrawer m_glyphDrawer;
 
-    // settings
-    bool m_simulate = true;
-    int m_steps_per_frame = 5;
-    int m_renderMode = RENDERMODE_PLAIN;
-    int m_numberOfStepsToTake = 3;
-    float m_magnitudeCutoff = 1.0f; // used for visualising force/velocity, max value to clamp to
+    Settings m_settings;
 };
 
 int main()

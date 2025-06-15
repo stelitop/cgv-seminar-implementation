@@ -1,7 +1,11 @@
+#pragma once
+
 #include <filesystem>
 #include <glm/ext/vector_float3.hpp>
 #include <glm/ext/vector_int3.hpp>
 #include <framework/shader.h>
+#include <framework/ray.h>
+#include "settings.h"
 //#include <glm/fwd.hpp>
 
 #define BOUNDARY_EDGE 0u
@@ -10,8 +14,8 @@
 #define FACET_EDGE 3u
 
 #define RENDERMODE_PLAIN 0
-#define RENDERMODE_FORCE 1
-#define RENDERMODE_VELOCITY 2
+#define RENDERMODE_VELOCITY 1
+#define RENDERMODE_FORCE 2
 
 class Origami {
 public:
@@ -24,7 +28,8 @@ public:
 	/// </summary>
 	void triangulate(std::vector<unsigned int> verts);
 
-	void draw(const Shader& face_shader, const Shader& edge_shader, glm::mat4 mvpMatrix, int renderMode, float magnitudeCutoff);
+	//void draw(const Shader& face_shader, const Shader& edge_shader, glm::mat4 mvpMatrix, int renderMode, float magnitudeCutoff);
+	void draw(const Shader& face_shader, const Shader& edge_shader, glm::mat4 mvpMatrix, Settings& settings);
 
 	void updateVertexBuffers();
 
@@ -35,12 +40,18 @@ public:
 	std::vector<glm::vec3> creaseConstraints();
 	std::vector<glm::vec3> faceConstraints();
 	std::vector<glm::vec3> dampingForce();
-	std::vector<glm::vec3> calculateTotalForce();
+
+	std::vector<glm::vec3> getTotalForce();
+	std::vector<glm::vec3> getVelocities();
 
 	std::vector<glm::vec3> getVertices();
 
 	void setDefaultSettings();
 	void free();
+
+	bool intersectWithRay(Ray& ray);
+
+	glm::vec3 getSelectedPoint(Settings& settings);
 
 	// parameters
 	float EA = 20.0f;
@@ -56,8 +67,10 @@ public:
 	bool enable_face_constraints = true;
 	bool enable_damping_force = true;
 
+	std::string name;
 
-private:
+
+//private:
 
 	class VertexData {
 	public:
@@ -98,6 +111,10 @@ private:
 	/// </summary>
 	std::vector<glm::vec3> nominal_angles;
 
+	std::vector<glm::vec3> normals;
+
+	void normalizeVertices();
+	
 	void prepareGpuMesh();
 
 	/// <summary>
@@ -117,6 +134,10 @@ private:
 	glm::vec3 angles(glm::uvec3 face);
 
 	std::vector<VertexData> formatVertices();
+	void prepareEdgeShaderData(std::vector<glm::vec3>& vertexData, std::vector<glm::uvec3>& faceData);
+	void updateNormals();
+
+	bool intersectWithFace(Ray& ray, unsigned int face);
 
 
 	GLuint m_vao_faces;

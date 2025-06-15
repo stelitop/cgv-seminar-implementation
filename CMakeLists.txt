@@ -16,7 +16,8 @@ add_executable(OrigamiSimulatorImplementation
 	"src/camera.cpp"
 	"src/origami.cpp"
 	"src/origamiexception.h" 
-	"src/glyph_drawer.cpp")	
+	"src/glyph_drawer.cpp" 
+	"src/settings.cpp")	
 
 target_compile_definitions(OrigamiSimulatorImplementation PRIVATE RESOURCE_ROOT="${CMAKE_CURRENT_LIST_DIR}/")
 target_compile_features(OrigamiSimulatorImplementation PRIVATE cxx_std_20)

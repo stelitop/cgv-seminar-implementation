@@ -14,6 +14,7 @@ layout(location = 2) in vec3 velocity;
 out vec3 fragPosition;
 out vec3 fragForce;
 out vec3 fragVelocity;
+out vec3 worldPosPosition;
 
 void main()
 {
@@ -22,4 +23,5 @@ void main()
     fragPosition = (modelMatrix * vec4(position, 1)).xyz;
     fragForce = force;
     fragVelocity = velocity;
+    worldPosPosition = position;
 }

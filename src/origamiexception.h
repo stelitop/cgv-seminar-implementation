@@ -1,5 +1,6 @@
+#pragma once
 #include<exception>
-#include <string>
+#include<string>
 
 class OrigamiException
     : public std::exception

@@ -1,5 +1,3 @@
-#pragma once
-
 #include "camera.h"
 // Suppress warnings in third-party code.
 #include <framework/disable_all_warnings.h>
@@ -37,6 +35,20 @@ glm::mat4 Camera::viewMatrix() const
     return glm::lookAt(m_position, m_position + m_forward, m_up);
 }
 
+Ray Camera::generateRay(const glm::vec2& pixel, glm::mat4 projection_matrix)
+{
+    glm::vec4 rayClip = glm::vec4(pixel.x, pixel.y, -1.0f, 1.0f);
+    glm::vec4 rayEye = glm::inverse(projection_matrix) * rayClip;
+    rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0, 0.0);
+    glm::vec4 rayWorld = glm::inverse(viewMatrix()) * rayEye;
+
+    Ray ray;
+    ray.origin = m_position;
+    ray.direction = glm::normalize(glm::vec3(rayWorld.x, rayWorld.y, rayWorld.z));
+    ray.t = std::numeric_limits<float>::max();
+    return ray;
+}
+
 void Camera::rotateX(float angle)
 {
     const glm::vec3 horAxis = glm::cross(s_yAxis, m_forward);
@@ -55,6 +67,11 @@ void Camera::rotateY(float angle)
 
 void Camera::updateInput()
 {
+    /*std::cout << "Camera:" << std::endl;
+    std::cout << m_position.x << " " << m_position.y << " " << m_position.z << std::endl;
+    std::cout << m_forward.x << " " << m_forward.y << " " << m_forward.z << std::endl;
+    std::cout << m_up.x << " " << m_up.y << " " << m_up.z << std::endl;*/
+
     constexpr float moveSpeed = 0.03f;
     constexpr float lookSpeed = 0.0015f;
 

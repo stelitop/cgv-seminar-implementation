@@ -1,3 +1,4 @@
+#pragma once
 // Suppress warnings in third-party code.
 #include <framework/disable_all_warnings.h>
 DISABLE_WARNINGS_PUSH()
@@ -6,6 +7,7 @@ DISABLE_WARNINGS_PUSH()
 #include <glm/vec3.hpp>
 DISABLE_WARNINGS_POP()
 #include <framework/window.h>
+#include <framework/ray.h>
 
 class Camera {
 public:
@@ -17,6 +19,8 @@ public:
 
     glm::vec3 cameraPos() const;
     glm::mat4 viewMatrix() const;
+
+    Ray generateRay(const glm::vec2& pixel, glm::mat4 projection_matrix);
 
 private:
     void rotateX(float angle);

@@ -1,5 +1,4 @@
 #pragma once
-
 #include "origami.h"
 #include <fstream>
 #include "../external_code/third_party/json/single_include/nlohmann/json.hpp"
@@ -8,6 +7,8 @@
 #include "origamiexception.h"
 #include <cmath>
 #include <corecrt_math_defines.h>
+#include <framework/ray.h>
+#include "settings.h"
 
 using json = nlohmann::json;
 
@@ -21,10 +22,19 @@ Origami Origami::loadFromFile(std::filesystem::path filePath) {
 
 	Origami origami = Origami();
 
+	if (data.contains("frame_title")) {
+		origami.name = data["frame_title"];
+	}
+	else {
+		origami.name = filePath.string();
+	}
+
 	// load vertices and initial velocities
 	for (json vert : data["vertices_coords"]) {		
 		origami.vertices.push_back(VertexData(glm::vec3(vert[0], vert[1], vert[2]), glm::vec3(0), glm::vec3(0)));
 	}
+
+	origami.normalizeVertices();
 
 	// load edges(creases)
 	for (size_t i = 0; i < data["edges_vertices"].size(); i++) {
@@ -157,13 +167,19 @@ void Origami::triangulate(std::vector<unsigned int> verts) {
 	throw "Triangulation did not find an ear!";
 }
 
-void Origami::draw(const Shader& face_shader, const Shader& edge_shader, glm::mat4 mvpMatrix, int renderMode, float magnitudeCutoff) {
+void Origami::draw(const Shader& face_shader, const Shader& edge_shader, glm::mat4 mvpMatrix, Settings& settings) {
 
 	// draw faces
 	face_shader.bind();
 	glUniformMatrix4fv(face_shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
-	glUniform1i(face_shader.getUniformLocation("renderMode"), renderMode);
-	glUniform1f(face_shader.getUniformLocation("magnitudeCutoff"), magnitudeCutoff);
+	glUniform1i(face_shader.getUniformLocation("renderMode"), settings.renderMode);
+	glUniform1f(face_shader.getUniformLocation("magnitudeCutoff"), settings.magnitudeCutoff);
+
+	glm::vec3 selectedPoint = getSelectedPoint(settings);
+	glUniform1i(face_shader.getUniformLocation("useSelectedPoint"), settings.useSelectedPoint ? 1 : 0);
+	glUniform3f(face_shader.getUniformLocation("selectedPoint"), selectedPoint.x, selectedPoint.y, selectedPoint.z);
+	glUniform1f(face_shader.getUniformLocation("selectedPointRadius"), settings.selectedPointRadius);
+
 	glBindVertexArray(m_vao_faces);
 	glDrawElements(GL_TRIANGLES, 3*this->faces.size(), GL_UNSIGNED_INT, nullptr);
 
@@ -173,6 +189,22 @@ void Origami::draw(const Shader& face_shader, const Shader& edge_shader, glm::ma
 	glBindVertexArray(m_vao_edges);
 	glDrawElements(GL_LINES, 2*this->edges.size(), GL_UNSIGNED_INT, nullptr);
 }
+//void Origami::draw(const Shader& face_shader, const Shader& edge_shader, glm::mat4 mvpMatrix, int renderMode, float magnitudeCutoff) {
+//
+//	// draw faces
+//	face_shader.bind();
+//	glUniformMatrix4fv(face_shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+//	glUniform1i(face_shader.getUniformLocation("renderMode"), renderMode);
+//	glUniform1f(face_shader.getUniformLocation("magnitudeCutoff"), magnitudeCutoff);
+//	glBindVertexArray(m_vao_faces);
+//	glDrawElements(GL_TRIANGLES, 3*this->faces.size(), GL_UNSIGNED_INT, nullptr);
+//
+//	//draw edges
+//	edge_shader.bind();
+//	glUniformMatrix4fv(edge_shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+//	glBindVertexArray(m_vao_edges);
+//	glDrawElements(GL_LINES, 2*this->edges.size(), GL_UNSIGNED_INT, nullptr);
+//}
 
 void Origami::updateVertexBuffers()
 {
@@ -182,11 +214,28 @@ void Origami::updateVertexBuffers()
 	auto formattedVertices = formatVertices();
 	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(formattedVertices.size() * sizeof(decltype(formattedVertices)::value_type)), formattedVertices.data(), GL_STATIC_DRAW);
 	
-
+	std::vector<glm::vec3> vertexDataEdgeShader;
+	std::vector<glm::uvec3> faceDataEdgeShader;
+	prepareEdgeShaderData(vertexDataEdgeShader, faceDataEdgeShader);
 	std::vector<glm::vec3> only_vertices = getVertices();
 	glBindVertexArray(m_vao_edges);
 	glBindBuffer(GL_ARRAY_BUFFER, m_vbo_edges);
 	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(only_vertices.size() * sizeof(decltype(only_vertices)::value_type)), only_vertices.data(), GL_STATIC_DRAW);
+}
+
+void Origami::normalizeVertices()
+{
+	glm::vec3 min = glm::vec3(std::numeric_limits<float>::max()), max = glm::vec3(std::numeric_limits<float>::min());
+	for (int i = 0; i < vertices.size(); i++) {
+		min = glm::min(min, vertices[i].coords);
+		max = glm::max(max, vertices[i].coords);
+	}
+	float maxLength = std::max(max.x - min.x, std::max(max.y - min.y, max.z - min.z));
+	min /= maxLength;
+	max /= maxLength;
+	for (int i = 0; i < vertices.size(); i++) {
+		vertices[i].coords = vertices[i].coords / maxLength + (max - min) / 2.0f;
+	}
 }
 
 void Origami::prepareGpuMesh() {
@@ -267,6 +316,22 @@ std::vector<Origami::VertexData> Origami::formatVertices()
 	return vertices;
 }
 
+void Origami::prepareEdgeShaderData(std::vector<glm::vec3>& vertexData, std::vector<glm::uvec3>& faceData)
+{
+	vertexData.clear();
+	faceData.clear();
+	
+	std::vector<glm::vec3> only_vertices = getVertices();
+}
+
+void Origami::updateNormals()
+{
+	normals.clear();
+	for (int i = 0; i < faces.size(); i++) {
+		normals.push_back(glm::normalize(glm::cross(vertices[faces[i].y].coords - vertices[faces[i].x].coords, vertices[faces[i].z].coords - vertices[faces[i].x].coords)));
+	}
+}
+
 unsigned int opposite_vertex(glm::uvec3 face, glm::uvec3 edge)
 {
 	if (face.x != edge.x && face.x != edge.y) {
@@ -279,7 +344,8 @@ unsigned int opposite_vertex(glm::uvec3 face, glm::uvec3 edge)
 }
 
 void Origami::step() {
-	std::vector<glm::vec3> totalForce = calculateTotalForce();
+	updateNormals();
+	std::vector<glm::vec3> totalForce = getTotalForce();
 	for (int i = 0; i < vertices.size(); i++) {
 		vertices[i].force = totalForce[i];
 		glm::vec3 a = totalForce[i];
@@ -331,7 +397,7 @@ std::vector<glm::vec3> Origami::creaseConstraints()
 		}
 		const float k_crease = this->edges[i].z == FACET_EDGE ? nominal_length[i] * k_facet : nominal_length[i] * k_fold;
 		// TODO: Update this so that it's controllable
-		float theta_target = this->edges[i].z == FACET_EDGE ? 0 : (this->edges[i].z == MOUNTAIN_EDGE ? M_PI : -M_PI);
+		float theta_target = this->edges[i].z == FACET_EDGE ? 0 : (this->edges[i].z == MOUNTAIN_EDGE ? -M_PI : M_PI);
 		theta_target *= target_angle_percent;
 
 		unsigned int f1 = edge_to_faces[i].x;
@@ -341,8 +407,8 @@ std::vector<glm::vec3> Origami::creaseConstraints()
 		unsigned int p3 = edges[i].x;
 		unsigned int p4 = edges[i].y;
 
-		glm::vec3 n1 = glm::normalize(glm::cross(vertices[faces[f1].y].coords - vertices[faces[f1].x].coords, vertices[faces[f1].z].coords - vertices[faces[f1].x].coords));
-		glm::vec3 n2 = glm::normalize(glm::cross(vertices[faces[f2].y].coords - vertices[faces[f2].x].coords, vertices[faces[f2].z].coords - vertices[faces[f2].x].coords));
+		glm::vec3 n1 = normals[f1];
+		glm::vec3 n2 = normals[f2];
 		float h1 = areaOfTriangle(vertices[faces[f1].x].coords, vertices[faces[f1].y].coords, vertices[faces[f1].z].coords) * 2.0f / glm::length(vertices[p4].coords - vertices[p3].coords);
 		float h2 = areaOfTriangle(vertices[faces[f2].x].coords, vertices[faces[f2].y].coords, vertices[faces[f2].z].coords) * 2.0f / glm::length(vertices[p4].coords - vertices[p3].coords);
 		glm::vec3 dthdp1 = n1 / h1;
@@ -352,6 +418,11 @@ std::vector<glm::vec3> Origami::creaseConstraints()
 
 		glm::vec3 p1proj = vertices[p1].coords - (vertices[p3].coords + glm::normalize(vertices[p4].coords - vertices[p3].coords) * std::sqrtf(std::abs(std::pow(glm::length(vertices[p3].coords - vertices[p1].coords), 2) - h1*h1)));
 		glm::vec3 p2proj = vertices[p2].coords - (vertices[p3].coords + glm::normalize(vertices[p4].coords - vertices[p3].coords) * std::sqrtf(std::abs(std::pow(glm::length(vertices[p3].coords - vertices[p2].coords), 2) - h2*h2)));
+		
+		
+		//glm::vec3 creaseVector = glm::normalize(vertices[p4].coords - vertices[p3].coords);
+		//float dotNormals = glm::dot(n1, n2);
+		//float theta = std::atan2(glm::dot(glm::cross(n1, creaseVector), n2), dotNormals);
 		float theta = std::acos(std::clamp(glm::dot(-p1proj, p2proj) / (h1 * h2), -1.0f, 1.0f));
 		// flip orientation based on normals if needed
 		if (glm::dot(n1, p1proj + p2proj) < 0) {
@@ -398,7 +469,7 @@ std::vector<glm::vec3> Origami::faceConstraints()
 	std::vector<glm::vec3> forces(this->vertices.size(), glm::vec3(0));
 
 	for (int i = 0; i < faces.size(); i++) {
-		glm::vec3 n = glm::normalize(glm::cross(vertices[faces[i].y].coords - vertices[faces[i].x].coords, vertices[faces[i].z].coords - vertices[faces[i].x].coords));
+		glm::vec3 n = normals[i];
 		glm::vec3 angles = this->angles(faces[i]);
 		const unsigned int p1 = faces[i].x;
 		const unsigned int p2 = faces[i].y;
@@ -453,7 +524,7 @@ std::vector<glm::vec3> Origami::dampingForce()
 	return forces;
 }
 
-std::vector<glm::vec3> Origami::calculateTotalForce()
+std::vector<glm::vec3> Origami::getTotalForce()
 {
 	if (m_force_cache_used) {
 		return m_total_force_cache;
@@ -477,6 +548,15 @@ std::vector<glm::vec3> Origami::calculateTotalForce()
 	}
 	m_force_cache_used = true;
 	return m_total_force_cache;
+}
+
+std::vector<glm::vec3> Origami::getVelocities()
+{
+	std::vector<glm::vec3> ret;
+	for (int i = 0; i < vertices.size(); i++) {
+		ret.push_back(vertices[i].velocity);
+	}
+	return ret;
 }
 
 std::vector<glm::vec3> Origami::getVertices()
@@ -511,4 +591,66 @@ void Origami::free()
 	glDeleteVertexArrays(1, &m_vao_edges);
 	glDeleteBuffers(1, &m_vbo_edges);
 	glDeleteBuffers(1, &m_ibo_edges);
+}
+
+bool Origami::intersectWithFace(Ray& ray, unsigned int face)
+{
+	glm::vec3 A = vertices[faces[face].x].coords;
+	glm::vec3 B = vertices[faces[face].y].coords;
+	glm::vec3 C = vertices[faces[face].z].coords;
+	glm::vec3 n = glm::cross(B - A, C - A);
+	n = glm::normalize(n);
+	
+	if (glm::dot(n, ray.direction) == 0.0f) {
+		return false;
+	}
+
+	float t = (glm::dot(n, vertices[faces[face].x].coords) - glm::dot(n, ray.origin)) / glm::dot(n, ray.direction);
+
+	if (ray.t <= t) {
+		return false;
+	}
+	
+	glm::vec3 p = ray.origin + t * ray.direction;
+	if (std::abs(areaOfTriangle(A, B, C) - areaOfTriangle(A, B, p) - areaOfTriangle(A, p, C) - areaOfTriangle(p, B, C)) < 1e-5) {
+		ray.t = t;
+		return true;
+	}
+	return false;
+
+}
+
+bool Origami::intersectWithRay(Ray& ray)
+{
+	unsigned int bestFace = -1;
+	bool ret = false;
+	for (int i = 0; i < faces.size(); i++) {
+		if (intersectWithFace(ray, i)) {
+			ret = true;
+			bestFace = i;
+		}
+	}
+	if (ret) {
+		ray.face = bestFace;
+		glm::vec3 p = ray.origin + ray.t * ray.direction;
+		float totalArea = areaOfTriangle(vertices[faces[bestFace].x].coords, vertices[faces[bestFace].y].coords, vertices[faces[bestFace].z].coords);
+		ray.barycentricCoords = glm::vec3(
+			areaOfTriangle(p, vertices[faces[bestFace].y].coords, vertices[faces[bestFace].z].coords),
+			areaOfTriangle(vertices[faces[bestFace].x].coords, p, vertices[faces[bestFace].z].coords),
+			areaOfTriangle(vertices[faces[bestFace].x].coords, vertices[faces[bestFace].y].coords, p)
+		) / totalArea;
+	}
+	return ret;
+}
+
+glm::vec3 Origami::getSelectedPoint(Settings& settings)
+{
+	if (settings.selectedPointFace == -1) {
+		return glm::vec3(0);
+	} else {
+		return 
+			settings.selectedPointBarycentricCoords.x * vertices[faces[settings.selectedPointFace].x].coords +
+			settings.selectedPointBarycentricCoords.y * vertices[faces[settings.selectedPointFace].y].coords +
+			settings.selectedPointBarycentricCoords.z * vertices[faces[settings.selectedPointFace].z].coords;
+	}
 }

@@ -1,15 +1,19 @@
 #version 410
 
 #define RENDERMODE_PLAIN 0
-#define RENDERMODE_FORCE 1
-#define RENDERMODE_VELOCITY 2
+#define RENDERMODE_VELOCITY 1
+#define RENDERMODE_FORCE 2
 
 uniform int renderMode;
 uniform float magnitudeCutoff;
+uniform int useSelectedPoint;
+uniform vec3 selectedPoint;
+uniform float selectedPointRadius = 0.05f;
 
 in vec3 fragPosition;
 in vec3 fragForce;
 in vec3 fragVelocity;
+in vec3 worldPosPosition;
 
 layout(location = 0) out vec4 fragColor;
 
@@ -30,6 +34,13 @@ vec3 vectorToColor(vec3 v, float maxLength) {
 void main()
 {
     vec4 plainColor = vec4(0.8, 0.8, 0.8, 1.0);
+
+    if (useSelectedPoint == 1) {
+        if (distance(worldPosPosition, selectedPoint) > selectedPointRadius) {
+            fragColor = plainColor * 0.8f;
+            return;
+        }
+    }
 
     if (renderMode == RENDERMODE_PLAIN) {
         fragColor = plainColor;
