@@ -1,13 +1,20 @@
 #version 410
 
-in vec3 fragPosition;
-//in vec3 fragNormal;
-//in vec2 fragTexCoord;
+#define FACET_EDGE 3.0f
 
-layout(location = 0) out vec4 fragColor;
+uniform int showFacetEdges;
+
+in vec3 fragPosition;
+in vec3 fragColor;
+in float edgeType;
+
+layout(location = 0) out vec4 finalColor;
 
 void main()
 {
-    //vec3 normal = normalize(fragNormal);
-    fragColor = vec4(0, 0, 0, 1);
+    if (abs(edgeType- FACET_EDGE) < 1e-4 && showFacetEdges == 0) {
+        discard;
+    } 
+
+    finalColor = vec4(fragColor, 1);
 }

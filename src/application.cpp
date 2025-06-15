@@ -240,6 +240,7 @@ public:
             m_origami = Origami::loadFromFile(m_filename);
         }
         ImGui::SliderFloat("Selected Point Radius", &m_settings.selectedPointRadius, 0.0f, 0.5f);
+        ImGui::Checkbox("Show Facet Creases", &m_settings.showFacetEdges);
         ImGui::NewLine();
 
         //----------------------------------------------

@@ -134,7 +134,7 @@ public:
 	glm::vec3 angles(glm::uvec3 face);
 
 	std::vector<VertexData> formatVertices();
-	void prepareEdgeShaderData(std::vector<glm::vec3>& vertexData, std::vector<glm::uvec3>& faceData);
+	void prepareEdgeShaderData(std::vector<glm::vec4>& vertexData, std::vector<glm::uvec3>& faceData);
 	void updateNormals();
 
 	bool intersectWithFace(Ray& ray, unsigned int face);

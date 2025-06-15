@@ -5,6 +5,7 @@
 class Settings {
 public:
     bool simulate = true;
+    bool showFacetEdges = false;
     int steps_per_frame = 5;
     int renderMode = 0;
     int numberOfStepsToTake = 3;

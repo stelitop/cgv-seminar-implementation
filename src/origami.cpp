@@ -183,11 +183,18 @@ void Origami::draw(const Shader& face_shader, const Shader& edge_shader, glm::ma
 	glBindVertexArray(m_vao_faces);
 	glDrawElements(GL_TRIANGLES, 3*this->faces.size(), GL_UNSIGNED_INT, nullptr);
 
+	//glDisable(GL_DEPTH_TEST);
+	//glDepthFunc(GL_LEQUAL);
+
 	//draw edges
 	edge_shader.bind();
 	glUniformMatrix4fv(edge_shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
+	glUniform1i(edge_shader.getUniformLocation("showFacetEdges"), settings.showFacetEdges ? 1 : 0);
 	glBindVertexArray(m_vao_edges);
-	glDrawElements(GL_LINES, 2*this->edges.size(), GL_UNSIGNED_INT, nullptr);
+	glDrawElements(GL_TRIANGLES, 6*this->edges.size(), GL_UNSIGNED_INT, nullptr);
+
+	//glDepthFunc(GL_LESS);
+	//glEnable(GL_DEPTH_TEST);
 }
 //void Origami::draw(const Shader& face_shader, const Shader& edge_shader, glm::mat4 mvpMatrix, int renderMode, float magnitudeCutoff) {
 //
@@ -213,14 +220,19 @@ void Origami::updateVertexBuffers()
 
 	auto formattedVertices = formatVertices();
 	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(formattedVertices.size() * sizeof(decltype(formattedVertices)::value_type)), formattedVertices.data(), GL_STATIC_DRAW);
-	
-	std::vector<glm::vec3> vertexDataEdgeShader;
+
+	std::vector<glm::vec4> vertexDataEdgeShader;
 	std::vector<glm::uvec3> faceDataEdgeShader;
 	prepareEdgeShaderData(vertexDataEdgeShader, faceDataEdgeShader);
+
 	std::vector<glm::vec3> only_vertices = getVertices();
 	glBindVertexArray(m_vao_edges);
 	glBindBuffer(GL_ARRAY_BUFFER, m_vbo_edges);
-	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(only_vertices.size() * sizeof(decltype(only_vertices)::value_type)), only_vertices.data(), GL_STATIC_DRAW);
+	glBufferData(GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertexDataEdgeShader.size() * sizeof(decltype(vertexDataEdgeShader)::value_type)), vertexDataEdgeShader.data(), GL_STATIC_DRAW);
+
+	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo_edges);
+	glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(faceDataEdgeShader.size() * sizeof(decltype(faceDataEdgeShader)::value_type)), faceDataEdgeShader.data(), GL_STATIC_DRAW);
+
 }
 
 void Origami::normalizeVertices()
@@ -239,6 +251,8 @@ void Origami::normalizeVertices()
 }
 
 void Origami::prepareGpuMesh() {
+
+	updateNormals();
 
 	// Create VAO and bind it so subsequent creations of VBO and IBO are bound to this VAO
 	glGenVertexArrays(1, &m_vao_faces);
@@ -281,12 +295,9 @@ void Origami::prepareGpuMesh() {
 	glGenBuffers(1, &m_ibo_edges);
 	glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ibo_edges);
 
-	//glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(newfaces.size() * sizeof(decltype(newfaces)::value_type)), newfaces.data(), GL_STATIC_DRAW);
-	glBufferData(GL_ELEMENT_ARRAY_BUFFER, static_cast<GLsizeiptr>(edges_gpu.size() * sizeof(decltype(edges_gpu)::value_type)), edges_gpu.data(), GL_STATIC_DRAW);
-
 	// We tell OpenGL what each vertex looks like and how they are mapped to the shader (location = ...).
 	glEnableVertexAttribArray(0);
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+	glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, sizeof(glm::vec4), (void*)0);
 
 	// update the data in the buffers
 	updateVertexBuffers();
@@ -316,12 +327,25 @@ std::vector<Origami::VertexData> Origami::formatVertices()
 	return vertices;
 }
 
-void Origami::prepareEdgeShaderData(std::vector<glm::vec3>& vertexData, std::vector<glm::uvec3>& faceData)
+void Origami::prepareEdgeShaderData(std::vector<glm::vec4>& vertexData, std::vector<glm::uvec3>& faceData)
 {
+	const float width = 2.5e-3f;
 	vertexData.clear();
 	faceData.clear();
-	
-	std::vector<glm::vec3> only_vertices = getVertices();
+	for (int i = 0; i < edges.size(); i++) {
+		glm::vec3 meanN = normals[edge_to_faces[i].x] + normals[edge_to_faces[i].y];
+		glm::vec3 dir1 = vertices[edges[i].y].coords - vertices[edges[i].x].coords;
+		glm::vec3 dir2 = glm::cross(dir1, meanN);
+		dir1 = width * glm::normalize(dir1);
+		dir2 = width * glm::normalize(dir2);
+		meanN = width * 0.1f * glm::normalize(meanN); // add meanN to prevent Z fighting
+		vertexData.push_back(glm::vec4(vertices[edges[i].x].coords - dir1 - dir2 + meanN, float(edges[i].z)));
+		vertexData.push_back(glm::vec4(vertices[edges[i].y].coords + dir1 - dir2 + meanN, float(edges[i].z)));
+		vertexData.push_back(glm::vec4(vertices[edges[i].y].coords + dir1 + dir2 + meanN, float(edges[i].z)));
+		vertexData.push_back(glm::vec4(vertices[edges[i].x].coords - dir1 + dir2 + meanN, float(edges[i].z)));
+		faceData.push_back(glm::uvec3(4*i, 4*i+1, 4*i +2));
+		faceData.push_back(glm::uvec3(4*i, 4*i+2, 4*i +3));
+	}
 }
 
 void Origami::updateNormals()
