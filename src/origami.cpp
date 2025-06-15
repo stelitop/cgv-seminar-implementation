@@ -191,7 +191,7 @@ void Origami::draw(const Shader& face_shader, const Shader& edge_shader, glm::ma
 	glUniformMatrix4fv(edge_shader.getUniformLocation("mvpMatrix"), 1, GL_FALSE, glm::value_ptr(mvpMatrix));
 	glUniform1i(edge_shader.getUniformLocation("showFacetEdges"), settings.showFacetEdges ? 1 : 0);
 	glBindVertexArray(m_vao_edges);
-	glDrawElements(GL_TRIANGLES, 6*this->edges.size(), GL_UNSIGNED_INT, nullptr);
+	glDrawElements(GL_TRIANGLES, 36*this->edges.size(), GL_UNSIGNED_INT, nullptr);
 
 	//glDepthFunc(GL_LESS);
 	//glEnable(GL_DEPTH_TEST);
@@ -338,13 +338,29 @@ void Origami::prepareEdgeShaderData(std::vector<glm::vec4>& vertexData, std::vec
 		glm::vec3 dir2 = glm::cross(dir1, meanN);
 		dir1 = width * glm::normalize(dir1);
 		dir2 = width * glm::normalize(dir2);
-		meanN = width * 0.1f * glm::normalize(meanN); // add meanN to prevent Z fighting
-		vertexData.push_back(glm::vec4(vertices[edges[i].x].coords - dir1 - dir2 + meanN, float(edges[i].z)));
-		vertexData.push_back(glm::vec4(vertices[edges[i].y].coords + dir1 - dir2 + meanN, float(edges[i].z)));
-		vertexData.push_back(glm::vec4(vertices[edges[i].y].coords + dir1 + dir2 + meanN, float(edges[i].z)));
-		vertexData.push_back(glm::vec4(vertices[edges[i].x].coords - dir1 + dir2 + meanN, float(edges[i].z)));
-		faceData.push_back(glm::uvec3(4*i, 4*i+1, 4*i +2));
-		faceData.push_back(glm::uvec3(4*i, 4*i+2, 4*i +3));
+		meanN = width * 1.0f * glm::normalize(meanN); // add meanN to prevent Z fighting
+		vertexData.push_back(glm::vec4(vertices[edges[i].x].coords - dir2 + meanN, float(edges[i].z))); //- dir1 
+		vertexData.push_back(glm::vec4(vertices[edges[i].y].coords - dir2 + meanN, float(edges[i].z)));	//+ dir1 
+		vertexData.push_back(glm::vec4(vertices[edges[i].y].coords + dir2 + meanN, float(edges[i].z)));	//+ dir1 
+		vertexData.push_back(glm::vec4(vertices[edges[i].x].coords + dir2 + meanN, float(edges[i].z)));	//- dir1 
+		vertexData.push_back(glm::vec4(vertices[edges[i].x].coords - dir2 - meanN, float(edges[i].z)));	//- dir1 
+		vertexData.push_back(glm::vec4(vertices[edges[i].y].coords - dir2 - meanN, float(edges[i].z)));	//+ dir1 
+		vertexData.push_back(glm::vec4(vertices[edges[i].y].coords + dir2 - meanN, float(edges[i].z)));	//+ dir1 
+		vertexData.push_back(glm::vec4(vertices[edges[i].x].coords + dir2 - meanN, float(edges[i].z)));	//- dir1 
+		faceData.push_back(glm::uvec3(8*i, 8*i+1, 8*i+2));
+		faceData.push_back(glm::uvec3(8*i, 8*i+2, 8*i+3));
+		faceData.push_back(glm::uvec3(8*i+4, 8*i+5, 8*i+6));
+		faceData.push_back(glm::uvec3(8*i+4, 8*i+6, 8*i+7));
+
+		faceData.push_back(glm::uvec3(8 * i + 0, 8 * i + 1, 8 * i + 5));
+		faceData.push_back(glm::uvec3(8 * i + 0, 8 * i + 5, 8 * i + 4));
+		faceData.push_back(glm::uvec3(8 * i + 2, 8 * i + 3, 8 * i + 7));
+		faceData.push_back(glm::uvec3(8 * i + 2, 8 * i + 7, 8 * i + 6));
+
+		faceData.push_back(glm::uvec3(8 * i + 0, 8 * i + 3, 8 * i + 7));
+		faceData.push_back(glm::uvec3(8 * i + 0, 8 * i + 4, 8 * i + 7));
+		faceData.push_back(glm::uvec3(8 * i + 1, 8 * i + 2, 8 * i + 6));
+		faceData.push_back(glm::uvec3(8 * i + 1, 8 * i + 5, 8 * i + 6));
 	}
 }
 
